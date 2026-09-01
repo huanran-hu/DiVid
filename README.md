@@ -1,27 +1,55 @@
+
+```markdown
+Despite remarkable progress, video generation models often produce highly similar outputs when repeatedly sampled from the same prompt, a homogenization phenomenon obscured by existing global diversity metrics. To address this, we introduce **DiVid**, a dimension-level diagnostic framework that decomposes video generation diversity into six interpretable spatiotemporal dimensions: Semantic, Style, Subject, Scene, Motion, and Camera. By systematically evaluating representative models using our reproducible vision pipelines, we reveal that diversity is highly dimension-specific—models with strong overall diversity can still exhibit severe collapse in specific factors like temporal dynamics, exposing fundamental bottlenecks such as default mode convergence and realization gaps.
+
+**Key Contributions:**
+* **Six-Dimensional Diagnostic Framework:** Decomposes video diversity into holistic dimensions (Semantic, Style) and factor-level dimensions (Subject, Scene, Motion, Camera) for localized and interpretable diagnosis.
+* **Reproducible Evaluation Pipelines:** Utilizes state-of-the-art vision models (GroundingDINO, SAM 2, DINOv2, CoTracker, RAFT) to compute Mean Pairwise Distance (MPD) and Vendi scores for fine-grained diversity measurement.
+* **New Benchmarking Insights:** Demonstrates that current frontier video generation models suffer from severe dimension-specific diversity collapse, proving that high global diversity does not guarantee variation in individual temporal or spatial factors.
+* **Bottleneck Identification:** Employs controlled prompt interventions to uncover two primary behavioral causes of homogenization: *default mode convergence* (falling back to training priors under open prompts) and *realization gaps* (failing to faithfully execute explicit diverse instructions).
+
+![intro](images/intro.jpg)
+![framework](images/framework.jpg)
+![experiment](images/experiment.jpg)
+
+
+## Table of Contents
+- [Method](#method)
+- [Installation](#installation)
+- [Model Weights](#model-weights)
+- [Usage](#usage)
+  - [Evaluate a Video Directory](#evaluate-a-video-directory)
+  - [Pass Video Paths Directly](#pass-video-paths-directly)
+  - [Evaluate Selected Dimensions](#evaluate-selected-dimensions)
+- [Output](#output)
+- [Python API](#python-api)
+- [License](#license)
+```
+
 # DiVid
 
-DiVid 是一个面向视频生成模型的六维多样性评测工具。给定同一个生成 prompt 和一组 `k >= 2` 个视频，工具输出六个维度的 Mean Pairwise Distance (MPD)：
+DiVid is a six-dimensional diversity evaluator for text-to-video generation. Given a prompt and a set of `k >= 2` videos generated from that prompt, it returns Mean Pairwise Distance (MPD) for:
 
 ```text
 semantic, style, subject, scene, motion, camera
 ```
 
-MPD 计算同一 prompt 下所有视频对的平均距离，分数越高表示该维度的跨视频变化越大。每个维度同时返回基于同一相似度 kernel 的 Vendi score 和相似度矩阵。
+MPD is the mean distance over all video pairs for one prompt. A higher score indicates more variation along the corresponding dimension. The evaluator also returns a Vendi score and the underlying similarity matrix for each requested dimension.
 
-## 评测原理
+## Method
 
-- **Semantic**：OpenCLIP 视频特征与 prompt 文本特征构造条件 kernel，去除共同的 prompt 对齐成分。
-- **Style**：InceptionV3 pool3 视频特征比较整体构图、纹理、色彩、光照和外观。
-- **Subject**：GroundingDINO 定位主体，SAM2 跟踪 mask，DINOv2 编码主体裁剪区域。
-- **Scene**：复用主体 mask，将主体区域模糊后，用 DINOv2 编码背景环境。
-- **Motion v4.1**：CoTracker 提取主体相对背景轨迹，并在主体 canonical 化后用 RAFT 提取非刚性形变；两者的 RBF kernel 等权融合。
-- **Camera v3**：CoTracker 跟踪背景点，使用 RANSAC 拟合全局 affine/homography 变换，比较平移、缩放、旋转等运镜描述符。
+- **Semantic**: builds a prompt-conditioned kernel from OpenCLIP video and text features, removing the shared prompt-alignment component.
+- **Style**: compares InceptionV3 pool3 video features to measure variation in composition, texture, color, lighting, and appearance.
+- **Subject**: localizes subjects with GroundingDINO, tracks masks with SAM 2, and encodes subject crops with DINOv2.
+- **Scene**: reuses the subject masks, suppresses the subject region, and encodes the surrounding scene with DINOv2.
+- **Motion v4.1**: extracts subject-relative trajectories with CoTracker and non-rigid deformation with RAFT after subject canonicalization; the two RBF kernels are combined with equal weight.
+- **Camera v3**: tracks background points with CoTracker and fits global affine/homography transforms with RANSAC to measure camera translation, scale, rotation, and related changes.
 
-Subject/Scene/Motion/Camera 使用同一套主体定位结果，但后续输入区域和描述符不同：Subject 只编码主体，Scene 只编码被抑制主体后的背景，Motion 使用主体相对背景的运动，Camera 使用背景的全局变换。
+Subject, Scene, Motion, and Camera share subject localization but use different downstream regions and descriptors. Subject encodes the foreground, Scene encodes the subject-suppressed background, Motion measures subject-relative movement, and Camera measures global background motion.
 
-## 安装
+## Installation
 
-建议使用 Python 3.10 或更高版本，并根据硬件安装对应 CUDA 版本的 PyTorch。
+Python 3.10 or newer is recommended. Install a PyTorch build compatible with your CUDA version before running GPU evaluation.
 
 ```bash
 git clone https://github.com/your-org/DiVid.git
@@ -33,11 +61,11 @@ python -m pip install -e .
 python -m pip install git+https://github.com/facebookresearch/co-tracker.git
 ```
 
-## 模型
+## Model Weights
 
-OpenCLIP 和 Hugging Face 模型会按默认配置自动下载。为复现实验中的视觉和动态评测，请将以下权重放在项目的 `models/` 目录：
+OpenCLIP and Hugging Face models can be downloaded automatically by their respective libraries. For reproducible appearance and motion evaluation, place the following checkpoints in the project `models/` directory:
 
-| 模型 | 下载地址 |
+| Model | Download |
 | --- | --- |
 | InceptionV3 | [PyTorch checkpoint](https://download.pytorch.org/models/inception_v3_google-0cc3c7bd.pth) |
 | RAFT-Large | [PyTorch checkpoint](https://download.pytorch.org/models/raft_large_C_T_SKHT_V2-ff5fadd5.pth) |
@@ -45,6 +73,8 @@ OpenCLIP 和 Hugging Face 模型会按默认配置自动下载。为复现实验
 | GroundingDINO | [Hugging Face model](https://huggingface.co/IDEA-Research/grounding-dino-base) |
 | SAM 2.1 | [Hugging Face model](https://huggingface.co/facebook/sam2.1-hiera-large) |
 | DINOv2 | [Hugging Face model](https://huggingface.co/facebook/dinov2-large) |
+
+Example downloads for the manually managed checkpoints:
 
 ```bash
 mkdir -p models
@@ -56,13 +86,13 @@ wget -O models/scaled_offline.pth \
   https://huggingface.co/facebook/cotracker3/resolve/main/scaled_offline.pth
 ```
 
-第三方模型遵循各自的许可证和使用条款；发布或商用前请分别确认其许可范围。
+The third-party models and weights remain subject to their own licenses and terms of use.
 
-## 使用指南
+## Usage
 
-### 评测一个视频目录
+### Evaluate a Video Directory
 
-目录中放置同一个 prompt 生成的至少两个视频：
+Place at least two videos generated from the same prompt in one directory:
 
 ```bash
 python -m divid.cli \
@@ -72,7 +102,7 @@ python -m divid.cli \
   --output ./results/example.json
 ```
 
-`--subjects` 是 Subject、Scene、Motion、Camera 的主体查询。多主体可以写成多个参数：
+Use one `--subjects` argument for each relevant subject:
 
 ```bash
 python -m divid.cli \
@@ -81,9 +111,9 @@ python -m divid.cli \
   --subjects "a dog" "a red ball"
 ```
 
-如果不提供 `--subjects`，程序会把完整 prompt 作为 GroundingDINO 查询；对复杂 prompt，建议显式提供主体短语。
+Without `--subjects`, the full prompt is used as the GroundingDINO query. For complex prompts, explicit short subject phrases are recommended.
 
-### 直接指定视频
+### Pass Video Paths Directly
 
 ```bash
 python -m divid.cli \
@@ -92,7 +122,7 @@ python -m divid.cli \
   --subjects "a red car"
 ```
 
-### 只运行部分维度
+### Evaluate Selected Dimensions
 
 ```bash
 python -m divid.cli \
@@ -103,11 +133,11 @@ python -m divid.cli \
   --device cuda
 ```
 
-无 GPU 时可使用 `--device cpu`，但 Subject/Scene、Motion 和 Camera 会明显变慢。
+Use `--device cpu` on a machine without a GPU. Subject, Scene, Motion, and Camera evaluation are substantially slower on CPU.
 
-## 输出
+## Output
 
-结果为 JSON，主要字段如下：
+The command writes JSON containing the prompt, video count, and per-dimension scores:
 
 ```json
 {
@@ -122,7 +152,7 @@ python -m divid.cli \
 }
 ```
 
-不同维度的 MPD 不应直接跨维度比较绝对值；模型比较应在同一维度、相同 prompt 和相同视频数下进行。当前版本只包含六维多样性核心评测，不包含质量、忠实度或旧版动态指标。
+MPD values should be compared within the same dimension, prompt, and video count; absolute MPD values should not be compared across dimensions. This repository contains only the six-dimensional diversity core and does not include quality, faithfulness, or legacy dynamic metrics.
 
 ## Python API
 
@@ -138,6 +168,6 @@ scores = evaluate(
 print(scores["semantic_mpd"], scores["camera_mpd"])
 ```
 
-## 许可证
+## License
 
-DiVid 代码采用 MIT License。GroundingDINO、SAM2、DINOv2、CoTracker、OpenCLIP、InceptionV3 和 RAFT 权重及代码仍受其各自许可证约束。
+DiVid code is released under the MIT License. GroundingDINO, SAM 2, DINOv2, CoTracker, OpenCLIP, InceptionV3, and RAFT code and weights remain subject to their respective licenses.
