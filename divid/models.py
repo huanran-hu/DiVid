@@ -84,7 +84,11 @@ class ModelBundle:
 
             model, _, preprocess = open_clip.create_model_and_transforms(
                 self.config.clip_model,
-                pretrained=self.config.clip_pretrained,
+                pretrained=(
+                    str(resolve_project_path(self.config.clip_pretrained))
+                    if resolve_project_path(self.config.clip_pretrained).is_file()
+                    else "openai"
+                ),
             )
             tokenizer = open_clip.get_tokenizer(self.config.clip_model)
             self._semantic = SemanticBundle(model.to(self.device).eval(), preprocess, tokenizer)
@@ -127,19 +131,24 @@ class ModelBundle:
     @property
     def tracker(self) -> TrackerBundle:
         if self._tracker is None:
-            import sys
             import torch
 
             checkpoint = resolve_project_path(self.config.cotracker_checkpoint)
+            if not checkpoint.is_file():
+                raise FileNotFoundError(
+                    "CoTracker checkpoint is missing. Download scaled_offline.pth from "
+                    "https://huggingface.co/facebook/cotracker3/resolve/main/scaled_offline.pth "
+                    f"and place it at {checkpoint}."
+                )
             try:
                 from cotracker.predictor import CoTrackerPredictor
 
-                model = CoTrackerPredictor(checkpoint=str(checkpoint) if checkpoint.is_file() else None)
+                model = CoTrackerPredictor(checkpoint=str(checkpoint))
             except ImportError as exc:
                 raise ImportError(
                     "Install CoTracker3 with: pip install git+https://github.com/facebookresearch/co-tracker.git"
                 ) from exc
-            if checkpoint.is_file() and not model.__class__.__name__.lower().endswith("predictor"):
+            if not model.__class__.__name__.lower().endswith("predictor"):
                 state = torch.load(checkpoint, map_location="cpu")
                 if isinstance(state, dict) and "model" in state:
                     state = state["model"]

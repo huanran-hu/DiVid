@@ -219,6 +219,15 @@ def compute_subject_mask_tracks(
         if track.valid:
             valid_indices.append(video_index)
 
+    success_rate = len(valid_indices) / max(len(video_paths), 1)
     if len(valid_indices) < 2:
         return SubjectMaskTracks(normalized, tracks, valid_indices, "error", "Fewer than two videos have valid subject masks.")
+    if success_rate < config.subject_mask_min_video_success_rate:
+        return SubjectMaskTracks(
+            normalized,
+            tracks,
+            valid_indices,
+            "error",
+            f"Subject mask success rate {success_rate:.3f} is below {config.subject_mask_min_video_success_rate:.3f}.",
+        )
     return SubjectMaskTracks(normalized, tracks, valid_indices, "ok")

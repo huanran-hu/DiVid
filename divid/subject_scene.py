@@ -64,6 +64,21 @@ def _metrics(features: np.ndarray, eps: float) -> dict:
     }
 
 
+def _kernel_metrics(similarity: np.ndarray, eps: float) -> dict:
+    kernel = np.asarray(similarity, dtype=np.float64)
+    kernel = 0.5 * (kernel + kernel.T)
+    kernel = np.clip(kernel, -1.0, 1.0)
+    np.fill_diagonal(kernel, 1.0)
+    distance = np.clip(1.0 - kernel, 0.0, None)
+    np.fill_diagonal(distance, 0.0)
+    return {
+        "mpd": float(distance[np.triu_indices(len(distance), 1)].mean()) if len(distance) > 1 else 0.0,
+        "vendi": vendi_score_from_kernel(kernel, eps=eps),
+        "similarity": kernel.tolist(),
+        "distance": distance.tolist(),
+    }
+
+
 def compute_subject_scene(
     video_paths: list[str | Path],
     *,
@@ -83,24 +98,21 @@ def compute_subject_scene(
         raise ValueError("At least two valid subject-mask videos are required.")
 
     model_bundle = bundle.subject_scene
-    subject_features_by_query: list[np.ndarray] = []
-    subject_weights: list[float] = []
+    subject_features: dict[str, list[np.ndarray]] = {subject: [] for subject in mask_tracks.subjects}
+    subject_weights: dict[str, list[float]] = {subject: [] for subject in mask_tracks.subjects}
     scene_features: list[np.ndarray] = []
     for track in mask_tracks.valid_tracks:
-        query_features: list[np.ndarray] = []
-        query_areas: list[float] = []
         for subject in mask_tracks.subjects:
             frame_features = []
+            frame_areas = []
             for frame, mask in zip(track.frames, track.subject_masks[subject]):
                 if is_valid_mask(mask, config):
-                    query_areas.append(float(np.asarray(mask).mean()))
+                    frame_areas.append(float(np.asarray(mask).mean()))
                     frame_features.append(_embed(_subject_image(frame, mask), model_bundle, device))
-            if frame_features:
-                query_features.append(_mean_embedding(frame_features, config.eps))
-        if not query_features:
-            raise ValueError(f"No valid subject features for {track.video_path}.")
-        subject_features_by_query.append(np.mean(query_features, axis=0))
-        subject_weights.append(float(np.mean(query_areas)) if query_areas else 1.0)
+            if not frame_features:
+                raise ValueError(f"No valid subject features for {subject!r} in {track.video_path}.")
+            subject_features[subject].append(_mean_embedding(frame_features, config.eps))
+            subject_weights[subject].append(float(np.mean(frame_areas)) if frame_areas else 1.0)
 
         frame_features = []
         for frame, mask in zip(track.frames, track.union_masks):
@@ -108,7 +120,18 @@ def compute_subject_scene(
                 frame_features.append(_embed(_scene_image(frame, mask), model_bundle, device))
         scene_features.append(_mean_embedding(frame_features, config.eps))
 
-    subject = _metrics(np.asarray(subject_features_by_query), config.eps)
+    weighted_kernel = None
+    total_weight = 0.0
+    for subject_name, features in subject_features.items():
+        values = l2_normalize(np.asarray(features), eps=config.eps)
+        kernel = np.clip(values @ values.T, -1.0, 1.0)
+        np.fill_diagonal(kernel, 1.0)
+        weight = float(np.mean(subject_weights[subject_name]))
+        weighted_kernel = kernel * weight if weighted_kernel is None else weighted_kernel + kernel * weight
+        total_weight += weight
+    if weighted_kernel is None or total_weight <= config.eps:
+        raise ValueError("No valid subject similarity kernel was computed.")
+    subject = _kernel_metrics(weighted_kernel / total_weight, config.eps)
     scene = _metrics(np.asarray(scene_features), config.eps)
     return {
         "subject_mpd": subject["mpd"],

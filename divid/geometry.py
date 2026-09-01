@@ -301,7 +301,15 @@ def _deformation_pair(flow: np.ndarray, mask: np.ndarray, config: EvalConfig) ->
     indices = np.linspace(0, len(xs) - 1, count).round().astype(int)
     source = np.stack([xs[indices], ys[indices]], axis=1).astype(np.float32)
     target = source + flow[:, ys[indices], xs[indices]].T
-    matrix, _ = cv2.estimateAffinePartial2D(source, target, cv2.RANSAC, config.motion_subject_affine_ransac_threshold_px)
+    matrix, _ = cv2.estimateAffinePartial2D(
+        source,
+        target,
+        method=cv2.RANSAC,
+        ransacReprojThreshold=config.motion_subject_affine_ransac_threshold_px,
+        maxIters=2000,
+        confidence=0.99,
+        refineIters=10,
+    )
     residual = flow - (affine_flow(matrix, flow.shape[2], flow.shape[1]) if matrix is not None else 0)
     u, v = residual[0, subject], residual[1, subject]
     magnitude = np.sqrt(u * u + v * v) / max(np.hypot(flow.shape[2], flow.shape[1]), config.eps)
