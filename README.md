@@ -27,7 +27,7 @@ Arxiv link: coming soon.
 - [Python API](#python-api)
 - [License](#license)
 
-# DiVid
+# Overview
 
 DiVid is a six-dimensional diversity evaluator for text-to-video generation. Given a prompt and a set of `k >= 2` videos generated from that prompt, it returns Mean Pairwise Distance (MPD) for:
 
@@ -43,8 +43,8 @@ MPD is the mean distance over all video pairs for one prompt. A higher score ind
 - **Style**: compares InceptionV3 pool3 video features to measure variation in composition, texture, color, lighting, and appearance.
 - **Subject**: localizes subjects with GroundingDINO, tracks masks with SAM 2, and encodes subject crops with DINOv2.
 - **Scene**: reuses the subject masks, suppresses the subject region, and encodes the surrounding scene with DINOv2.
-- **Motion v4.1**: extracts subject-relative trajectories with CoTracker and non-rigid deformation with RAFT after subject canonicalization; the two RBF kernels are combined with equal weight.
-- **Camera v3**: tracks background points with CoTracker and fits global affine/homography transforms with RANSAC to measure camera translation, scale, rotation, and related changes.
+- **Motion**: extracts subject-relative trajectories with CoTracker and non-rigid deformation with RAFT after subject canonicalization; the two RBF kernels are combined with equal weight.
+- **Camera**: tracks background points with CoTracker and fits global affine/homography transforms with RANSAC to measure camera translation, scale, rotation, and related changes.
 
 Subject, Scene, Motion, and Camera share subject localization but use different downstream regions and descriptors. Subject encodes the foreground, Scene encodes the subject-suppressed background, Motion measures subject-relative movement, and Camera measures global background motion.
 
@@ -53,7 +53,7 @@ Subject, Scene, Motion, and Camera share subject localization but use different 
 Python 3.10 or newer is recommended. Install a PyTorch build compatible with your CUDA version before running GPU evaluation.
 
 ```bash
-git clone https://github.com/your-org/DiVid.git
+git clone https://github.com/huanran-hu/DiVid.git
 cd DiVid
 python -m venv .venv
 source .venv/bin/activate
