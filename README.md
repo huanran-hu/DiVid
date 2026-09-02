@@ -1,3 +1,4 @@
+# DiVid: Diagnosing Dimension-Specific Diversity Collapse in Video Generation Models
 
 
 Despite remarkable progress, video generation models often produce highly similar outputs when repeatedly sampled from the same prompt, a homogenization phenomenon obscured by existing global diversity metrics. To address this, we introduce **DiVid**, a dimension-level diagnostic framework that decomposes video generation diversity into six interpretable spatiotemporal dimensions: Semantic, Style, Subject, Scene, Motion, and Camera. By systematically evaluating representative models using our reproducible vision pipelines, we reveal that diversity is highly dimension-specific—models with strong overall diversity can still exhibit severe collapse in specific factors like temporal dynamics, exposing fundamental bottlenecks such as default mode convergence and realization gaps.
@@ -12,6 +13,7 @@ Despite remarkable progress, video generation models often produce highly simila
 ![framework](images/framework.jpg)
 ![experiment](images/experiment.jpg)
 
+Arxiv link: coming soon.
 
 ## Table of Contents
 - [Method](#method)
